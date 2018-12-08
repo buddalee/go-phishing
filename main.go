@@ -97,6 +97,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Set-Cookie", newValue)
 
 	}
+	for k := range header {
+		if k != "Set-Cookie" {
+			value := header.Get(k)
+			w.Header().Set(k, value)
+		}
+	}
+	w.Header().Del("Content-Security-Policy")
+	w.Header().Del("Strict-Transport-Security")
+	w.Header().Del("X-Frame-Options")
+	w.Header().Del("X-Xss-Protection")
+	w.Header().Del("X-Pjax-Version")
+	w.Header().Del("X-Pjax-Url")
+
 	// 如果 status code 是 3XX 就取代 Location 網址
 	if statusCode >= 300 && statusCode < 400 {
 		location := header.Get("Location")
