@@ -135,6 +135,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	db.Connect()
+	db.Insert("Hello World")
+	db.Insert("I'm Budda Lee")
+	for _, str := range db.SelectAll() {
+		fmt.Println(str)
+	}
 	http.HandleFunc("/", handler)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
